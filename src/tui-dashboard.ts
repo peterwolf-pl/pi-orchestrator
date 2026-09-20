@@ -36,7 +36,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 		try {
 			const status = await orchestrator.getStatus(forceQuota);
 			clearScreen();
-			const termWidth = Math.min(process.stdout.columns || 90, 120);
+			const termWidth = process.stdout.columns ? Math.max(75, process.stdout.columns) : 120;
 			const rendered = renderDashboard(status, termWidth, {
 				scrollOffset: currentScrollOffset,
 				windowSize: currentWindowSize,

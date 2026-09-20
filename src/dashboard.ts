@@ -36,7 +36,8 @@ export interface DashboardRenderOptions {
 }
 
 export function renderDashboard(status: OrchestratorStatus, width = 78, options: DashboardRenderOptions = {}): string {
-	const w = Math.max(70, Math.min(width, 100));
+	const terminalCols = typeof process !== "undefined" && process.stdout?.columns ? process.stdout.columns : 120;
+	const w = Math.max(75, width && width > 78 ? width : terminalCols);
 	const innerWidth = w - 2;
 
 	const pad = (text: string, len: number) => {
@@ -228,6 +229,39 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 			`  Auditor : ${chalk.bold.white(aCfg.model)} (${chalk.dim(`thinking: ${aCfg.thinking.toUpperCase()}`)}) - Rapid scans`,
 		),
 	);
+
+	out.push(separator());
+
+	// FUNCTION & TOOL TOKEN USAGE (REAL-TIME BREAKDOWN)
+	out.push(line(chalk.bold.underline("FUNCTION & TOOL TOKEN USAGE (REAL-TIME ACCOUNTING)")));
+	out.push(line(""));
+
+	const funcUsage = status.functionTokenUsage || {};
+	const funcEntries = Object.values(funcUsage);
+	const fmtK = (n: number) => (n < 1000 ? `${n}` : `${(n / 1000).toFixed(1)}k`);
+
+	if (funcEntries.length === 0) {
+		out.push(line(chalk.dim("  (No function token usage recorded yet in current session)")));
+	} else {
+		for (const fn of funcEntries) {
+			const fnName = chalk.bold.cyan(fn.functionName.slice(0, 22).padEnd(22));
+			const calls = chalk.dim(`calls: ${fn.callsCount}`.padEnd(11));
+			const inStr = chalk.yellow(`▲ in: ${fmtK(fn.inputTokens)}`.padEnd(13));
+			const outStr = chalk.green(`▼ out: ${fmtK(fn.outputTokens)}`.padEnd(14));
+			const totalStr = chalk.bold.white(`Total: ${fmtK(fn.totalTokens)} tokens`);
+
+			out.push(line(`  ${fnName} ${calls} │ ${inStr} │ ${outStr} │ ${totalStr}`));
+		}
+	}
+
+	const tot = status.totalTokens || { input: 0, output: 0, total: 0 };
+	if (tot.total > 0) {
+		out.push(
+			line(
+				`  ${chalk.dim("Session Cumulative:")} ${chalk.yellow(`▲ ${fmtK(tot.input)} in`)} │ ${chalk.green(`▼ ${fmtK(tot.output)} out`)} │ ${chalk.bold.cyan(`Sum: ${fmtK(tot.total)} tokens`)}`,
+			),
+		);
+	}
 
 	out.push(separator());
 

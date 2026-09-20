@@ -193,7 +193,20 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 
 	pi.on("tool_execution_end", async (event, ctx) => {
 		orchestrator.setMasterLiveState("running", `Finished ${event.toolName}, synthesizing response...`);
+
+		// Real-time tool token accounting
+		const estInput = Math.max(150, Math.round(JSON.stringify(event.args || {}).length * 0.35));
+		const estOutput = Math.max(80, Math.round(JSON.stringify(event.result || {}).length * 0.35));
+		orchestrator.recordFunctionUsage(event.toolName, estInput, estOutput);
+
 		if (ctx.hasUI) updateUiIndicators(ctx.ui);
+	});
+
+	pi.on("message_end", async (event, _ctx) => {
+		if ((event.message as any)?.role === "assistant" && (event.message as any)?.usage) {
+			const u = (event.message as any).usage;
+			orchestrator.recordFunctionUsage("master_reasoning", u.input || 0, u.output || 0);
+		}
 	});
 
 	pi.on("agent_settled", async (_event, _ctx) => {

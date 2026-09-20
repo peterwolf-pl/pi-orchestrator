@@ -43,6 +43,15 @@ export interface SecurityAuditResult {
 	auditedAt: number;
 }
 
+export interface FunctionTokenUsage {
+	functionName: string; // e.g. "delegate_task", "edit", "read", "bash", "run_security_audit"
+	callsCount: number;
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	lastCalledAt?: number;
+}
+
 export interface SkillExtractionResult {
 	skillName: string;
 	filePath: string;
@@ -72,6 +81,11 @@ export interface WorkerTask {
 	createdAt: number;
 	startedAt?: number;
 	completedAt?: number;
+	tokensUsed?: {
+		input: number;
+		output: number;
+		total: number;
+	};
 }
 
 export interface TaskResult {
@@ -83,6 +97,11 @@ export interface TaskResult {
 	tests?: TaskTestResult;
 	securityAudit?: SecurityAuditResult;
 	skillCreated?: SkillExtractionResult;
+	tokensUsed?: {
+		input: number;
+		output: number;
+		total: number;
+	};
 	problems?: string;
 	recommendation?: string;
 	patch_available?: boolean;
@@ -223,6 +242,12 @@ export interface OrchestratorStatus {
 	skillsCreated: SkillExtractionResult[];
 	models?: OrchestratorModelSettings;
 	connection?: PiSessionConnection;
+	functionTokenUsage?: Record<string, FunctionTokenUsage>;
+	totalTokens?: {
+		input: number;
+		output: number;
+		total: number;
+	};
 }
 
 export type OrchestratorEventType =

@@ -18,6 +18,7 @@ import type {
 	AgentInfo,
 	AgentRole,
 	DocsGenerationResult,
+	FunctionTokenUsage,
 	MainTaskInfo,
 	OrchestratorConfig,
 	OrchestratorEvent,
@@ -62,6 +63,7 @@ export class Orchestrator {
 	private readonly listeners: Set<(event: OrchestratorEvent) => void> = new Set();
 	private taskCounter = 0;
 	private sessionConnection?: PiSessionConnection;
+	private readonly functionUsage: Map<string, FunctionTokenUsage> = new Map();
 
 	constructor(cwd: string = process.cwd()) {
 		this.cwd = cwd;
@@ -122,6 +124,37 @@ export class Orchestrator {
 			this.workerAgents.set(workerId, agent);
 		}
 		return agent;
+	}
+
+	public recordFunctionUsage(functionName: string, inputTokens = 0, outputTokens = 0): void {
+		const existing = this.functionUsage.get(functionName) || {
+			functionName,
+			callsCount: 0,
+			inputTokens: 0,
+			outputTokens: 0,
+			totalTokens: 0,
+		};
+		existing.callsCount += 1;
+		existing.inputTokens += Math.max(0, inputTokens);
+		existing.outputTokens += Math.max(0, outputTokens);
+		existing.totalTokens = existing.inputTokens + existing.outputTokens;
+		existing.lastCalledAt = Date.now();
+		this.functionUsage.set(functionName, existing);
+		this.saveState();
+	}
+
+	public getFunctionTokenUsage(): Record<string, FunctionTokenUsage> {
+		return Object.fromEntries(this.functionUsage.entries());
+	}
+
+	public getTotalTokens(): { input: number; output: number; total: number } {
+		let input = 0;
+		let output = 0;
+		for (const u of this.functionUsage.values()) {
+			input += u.inputTokens;
+			output += u.outputTokens;
+		}
+		return { input, output, total: input + output };
 	}
 
 	public setMasterAccount(accountId: string): void {
@@ -329,6 +362,7 @@ export class Orchestrator {
 						masterStatus: this.master.status,
 						masterActivity: this.master.currentActivity,
 						sessionConnection: this.sessionConnection,
+						functionUsage: Array.from(this.functionUsage.entries()),
 						lastUpdated: Date.now(),
 						tasks: serializableTasks,
 					},
@@ -351,6 +385,12 @@ export class Orchestrator {
 			if (data.mainTask) this.mainTask = data.mainTask;
 			if (data.sessionConnection) {
 				this.sessionConnection = data.sessionConnection;
+			}
+			if (Array.isArray(data.functionUsage)) {
+				this.functionUsage.clear();
+				for (const [k, v] of data.functionUsage) {
+					this.functionUsage.set(k, v);
+				}
 			}
 			if (data.masterStatus) {
 				this.master.setStatus(data.masterStatus, data.masterActivity);
@@ -773,6 +813,8 @@ export class Orchestrator {
 				auditor: { model: "grok-beta", thinking: "off" },
 			},
 			connection: this.getSessionConnection(),
+			functionTokenUsage: this.getFunctionTokenUsage(),
+			totalTokens: this.getTotalTokens(),
 		};
 	}
 
