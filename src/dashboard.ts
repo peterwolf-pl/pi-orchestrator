@@ -7,6 +7,7 @@
  * - General coding tasks & delegated work
  */
 
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import chalk from "chalk";
 import type { OrchestratorStatus } from "./types.ts";
 
@@ -40,10 +41,11 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 	const w = Math.max(75, width && width > 78 ? width : terminalCols);
 	const innerWidth = w - 2;
 
-	const pad = (text: string, len: number) => {
-		const stripped = text.replace(/\x1b\[[0-9;]*m/g, "");
-		const diff = len - stripped.length;
-		return diff > 0 ? text + " ".repeat(diff) : text.slice(0, len);
+	const pad = (text: string, targetWidth: number) => {
+		const truncated = truncateToWidth(text, targetWidth);
+		const currentWidth = visibleWidth(truncated);
+		const diff = targetWidth - currentWidth;
+		return diff > 0 ? truncated + " ".repeat(diff) : truncated;
 	};
 
 	const line = (content: string) => `│ ${pad(content, innerWidth - 2)} │`;
@@ -131,7 +133,11 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 				quotaLine = `5H ${fiveHBar} ${fiveHReset} │ WK ${weeklyBar} ${weeklyReset}`;
 			}
 
-			out.push(line(`  ${numTag} ${roleTag} ${chalk.white.bold(nameStr)}`));
+			const thTag = acc.thinking ? chalk.yellow(`[thinking: ${acc.thinking.toUpperCase()}]`) : "";
+			const specTag = acc.specialization ? chalk.dim(`(${acc.specialization})`) : "";
+			const extraInfo = `${thTag} ${specTag}`.trim();
+
+			out.push(line(`  ${numTag} ${roleTag} ${chalk.white.bold(nameStr)} ${extraInfo}`));
 			out.push(line(`       └─ ${quotaLine}`));
 			idx++;
 		}
@@ -361,13 +367,12 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 
 	for (let i = 0; i < windowSize; i++) {
 		const content = visibleLines[i] || "";
-		// Scrollbar indicator on the right edge
 		let scrollChar = " ";
 		if (totalLines > windowSize) {
 			const thumbIndex = Math.round((startIndex / maxOffset) * (windowSize - 1));
 			scrollChar = i === thumbIndex ? chalk.cyan.bold("█") : chalk.dim("│");
 		}
-		const textWidth = innerWidth - 5;
+		const textWidth = innerWidth - 4;
 		const padded = pad(content, textWidth);
 		out.push(`│ ${padded} ${scrollChar} │`);
 	}
@@ -381,9 +386,9 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 				"[C]",
 			)} Clear  ${chalk.dim("[1-5]")} Worker  ${chalk.dim("[M]")} Master  ${chalk.dim(
 				"[S]",
-			)} Auditor  ${chalk.dim("[O]")} Model  ${chalk.dim("[K]")} Skill  ${chalk.dim(
-				"[Q]",
-			)} Exit`,
+			)} Auditor  ${chalk.dim("[T]")} Thinking  ${chalk.dim("[P]")} Goal  ${chalk.dim(
+				"[K]",
+			)} Skill  ${chalk.dim("[Q]")} Exit`,
 		),
 	);
 	out.push(bottomBorder());

@@ -138,6 +138,9 @@ export interface AccountLimits {
 	enabled: boolean;
 	isMaster: boolean;
 	isSecurityAuditor: boolean;
+	thinking?: ThinkingLevel;
+	model?: string;
+	specialization?: string;
 	fiveHourRemaining?: number; // percentage 0..100
 	weeklyRemaining?: number; // percentage 0..100
 	fiveHourReset?: string;
@@ -179,6 +182,7 @@ export interface OrchestratorModelSettings {
 	master: AgentModelConfig;
 	worker: AgentModelConfig;
 	auditor: AgentModelConfig;
+	workers?: Record<string, AgentModelConfig>;
 }
 
 export interface OrchestratorConfig {

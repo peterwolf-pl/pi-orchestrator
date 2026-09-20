@@ -258,6 +258,28 @@ export class Orchestrator {
 		}
 	}
 
+	public setWorkerThinking(accountId: string, thinking: ThinkingLevel, model?: string): void {
+		if (!this.config.models) {
+			this.config.models = {
+				master: { model: "gemini-3.8-flash", thinking: "high" },
+				worker: { model: "gemini-3.8-flash", thinking: "low" },
+				auditor: { model: "grok-beta", thinking: "off" },
+				workers: {},
+			};
+		}
+		if (!this.config.models.workers) {
+			this.config.models.workers = {};
+		}
+		const current = this.config.models.workers[accountId] || {
+			model: model || this.config.models.worker.model || "gemini-3.8-flash",
+			thinking: "low",
+		};
+		current.thinking = thinking;
+		if (model) current.model = model;
+		this.config.models.workers[accountId] = current;
+		saveOrchestratorConfig(this.config, this.cwd);
+	}
+
 	public getActiveWorkers(): string[] {
 		return [...this.config.activeWorkers];
 	}
@@ -445,12 +467,40 @@ export class Orchestrator {
 		this.taskCounter++;
 		const taskId = params.taskId || `worker-${String(this.taskCounter).padStart(3, "0")}`;
 
-		// Select worker agent (explicit or round-robin)
+		// Smart Worker Selection based on Task Complexity and Worker Thinking Level:
 		let targetAgent = params.agent;
 		if (!targetAgent || !this.config.activeWorkers.includes(targetAgent)) {
-			// Select least busy worker
 			const active = this.config.activeWorkers;
-			targetAgent = active.length > 0 ? active[(this.taskCounter - 1) % active.length] : "worker";
+			const text = `${params.title} ${params.description}`.toLowerCase();
+			const isResearch = /investigat|research|analyz|architecture|complex|debug|why|root cause/i.test(text);
+			const isSimple = /test|unit test|simple|rename|format|doc|verify|check/i.test(text);
+
+			const getThinkingRank = (accId: string) => {
+				const th =
+					this.config.models?.workers?.[accId]?.thinking || this.config.models?.worker?.thinking || "low";
+				const ranks: Record<string, number> = {
+					off: 0,
+					minimal: 1,
+					low: 2,
+					medium: 3,
+					high: 4,
+					xhigh: 5,
+					max: 6,
+				};
+				return ranks[th] ?? 2;
+			};
+
+			if (isResearch && active.length > 0) {
+				// Pick active worker with highest thinking budget for research
+				const sorted = [...active].sort((a, b) => getThinkingRank(b) - getThinkingRank(a));
+				targetAgent = sorted[0];
+			} else if (isSimple && active.length > 0) {
+				// Pick active worker with lowest thinking budget to save quota on simple tasks
+				const sorted = [...active].sort((a, b) => getThinkingRank(a) - getThinkingRank(b));
+				targetAgent = sorted[0];
+			} else {
+				targetAgent = active.length > 0 ? active[(this.taskCounter - 1) % active.length] : "worker";
+			}
 		}
 
 		const task: WorkerTask = {
@@ -524,10 +574,11 @@ export class Orchestrator {
 
 		let result: TaskResult;
 		try {
+			const workerCfg = this.config.models?.workers?.[task.agent] || this.config.models?.worker;
 			const workerOptions: WorkerExecutionOptions = {
 				...options,
-				model: options.model || this.config.models?.worker?.model || "gemini-3.8-flash",
-				thinking: options.thinking || this.config.models?.worker?.thinking || "low",
+				model: options.model || workerCfg?.model || "gemini-3.8-flash",
+				thinking: options.thinking || workerCfg?.thinking || "low",
 				logger: this.logger,
 				fileOwnership: this.fileOwnership,
 			};
@@ -774,12 +825,27 @@ export class Orchestrator {
 				if (acc.isMaster) {
 					acc.role = "master";
 					acc.isSecurityAuditor = false;
+					acc.thinking = this.config.models?.master?.thinking || "high";
+					acc.model = this.config.models?.master?.model || "gemini-3.8-flash";
+					acc.specialization = "Architecture & Review";
 				} else if (isWorker) {
 					acc.role = "worker";
 					acc.isSecurityAuditor = false;
+					const wCfg = this.config.models?.workers?.[acc.accountId] || this.config.models?.worker;
+					acc.thinking = wCfg?.thinking || "low";
+					acc.model = wCfg?.model || "gemini-3.8-flash";
+					acc.specialization =
+						acc.thinking === "high"
+							? "Research / Complex"
+							: acc.thinking === "off" || acc.thinking === "minimal"
+								? "Fast Subtasks / Tests"
+								: "General Tasks";
 				} else if (isDesignatedAuditor) {
 					acc.role = "security_auditor";
 					acc.isSecurityAuditor = true;
+					acc.thinking = this.config.models?.auditor?.thinking || "off";
+					acc.model = this.config.models?.auditor?.model || "grok-beta";
+					acc.specialization = "Security Scans";
 				} else {
 					acc.role = "idle";
 					acc.isSecurityAuditor = false;

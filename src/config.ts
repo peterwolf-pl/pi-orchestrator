@@ -57,6 +57,11 @@ export function getDefaultConfig(): OrchestratorConfig {
 				model: "grok-beta",
 				thinking: "off",
 			},
+			workers: {
+				"google-antigravity-2": { model: "gemini-3.8-flash", thinking: "high" },
+				"google-antigravity-3": { model: "gemini-3.8-flash", thinking: "medium" },
+				"google-antigravity-4": { model: "gemini-3.8-flash", thinking: "off" },
+			},
 		},
 		idleWork: {
 			autoIdleWork: true,
@@ -133,6 +138,7 @@ export function loadOrchestratorConfig(cwd: string = process.cwd()): Orchestrato
 					model: parsed?.models?.auditor?.model || defaultConfig.models.auditor.model,
 					thinking: parsed?.models?.auditor?.thinking || defaultConfig.models.auditor.thinking,
 				},
+				workers: parsed?.models?.workers || defaultConfig.models.workers,
 			},
 			idleWork: {
 				autoIdleWork: parsed?.idleWork?.autoIdleWork ?? defaultConfig.idleWork.autoIdleWork,

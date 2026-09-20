@@ -27,8 +27,18 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 	let currentScrollOffset = 0;
 	let currentWindowSize = 14;
 
+	const enterAltScreen = () => {
+		// Switch to alternate screen buffer and hide cursor (zero scrollback pollution!)
+		process.stdout.write("\x1b[?1049h\x1b[?25l");
+	};
+
+	const exitAltScreen = () => {
+		// Restore normal terminal buffer and show cursor
+		process.stdout.write("\x1b[?25h\x1b[?1049l");
+	};
+
 	const clearScreen = () => {
-		process.stdout.write("\x1b[2J\x1b[0;0H");
+		process.stdout.write("\x1b[H\x1b[2J");
 	};
 
 	const redraw = async (forceQuota = false) => {
@@ -52,6 +62,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 
 	const promptInput = async (query: string): Promise<string> => {
 		isInputMode = true;
+		process.stdout.write("\x1b[?25h"); // Show cursor for input
 		if (process.stdin.isRaw) {
 			process.stdin.setRawMode(false);
 		}
@@ -67,11 +78,15 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 					process.stdin.setRawMode(true);
 					process.stdin.resume();
 				}
+				process.stdout.write("\x1b[?25l"); // Hide cursor again
 				isInputMode = false;
 				resolve(answer.trim());
 			});
 		});
 	};
+
+	// Enter alternate screen buffer
+	enterAltScreen();
 
 	// Set terminal raw mode
 	process.stdin.setRawMode(true);
@@ -112,7 +127,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 				process.stdin.setRawMode(false);
 			}
 			process.stdin.pause();
-			clearScreen();
+			exitAltScreen();
 			console.log(chalk.green("Dashboard exited. Pi Orchestrator running in background."));
 			process.exit(0);
 		}
@@ -297,8 +312,37 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 			return;
 		}
 
-		// T - Set new main coding task
+		// T - Configure Thinking level for specific account (1-5) or role
 		if (key === "t" || key === "T") {
+			if (refreshInterval) clearInterval(refreshInterval);
+			const accounts = getDiscoveredAccounts().map((a) => a.id);
+			const target = await promptInput("Select account slot (1-5) to set thinking level:");
+			const num = Number.parseInt(target, 10);
+			const accId = !Number.isNaN(num) && num >= 1 && num <= accounts.length ? accounts[num - 1] : target;
+			if (accId) {
+				const th = (
+					await promptInput(`Thinking level for ${accId} (off / low / medium / high):`)
+				).toLowerCase();
+				if (th === "off" || th === "low" || th === "medium" || th === "high") {
+					if (accId === orchestrator.config.masterAccount) {
+						orchestrator.setAgentModel("master", orchestrator.config.models.master.model, th as any);
+					} else if (accId === orchestrator.config.securityAuditorAccount) {
+						orchestrator.setAgentModel("auditor", orchestrator.config.models.auditor.model, th as any);
+					} else {
+						orchestrator.setWorkerThinking(accId, th as any);
+					}
+					message = chalk.green.bold(`✔ Thinking for ${accId} set to: ${th.toUpperCase()}`);
+				}
+			}
+			refreshInterval = setInterval(() => {
+				void redraw(false);
+			}, 1500);
+			await redraw(false);
+			return;
+		}
+
+		// P - Set new main coding prompt / objective
+		if (key === "p" || key === "P") {
 			if (refreshInterval) clearInterval(refreshInterval);
 			const title = await promptInput("Enter main coding objective:");
 			if (title) {
@@ -307,7 +351,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 			}
 			refreshInterval = setInterval(() => {
 				void redraw(false);
-			}, 4000);
+			}, 1500);
 			await redraw(false);
 			return;
 		}
