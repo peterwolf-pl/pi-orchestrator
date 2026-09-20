@@ -91,6 +91,18 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 	out.push(
 		line(`${chalk.bold.cyan("PI MULTI-AGENT CODING ORCHESTRATOR")} ${chalk.dim("│ Antigravity & xAI & Security")}`),
 	);
+
+	// Pi Live Session Connection Status
+	const conn = status.connection;
+	if (conn?.connected) {
+		const pidStr = conn.pid ? `pid: ${conn.pid}` : "linked";
+		const sessStr = conn.sessionName ? ` │ ${conn.sessionName}` : "";
+		const statusText = `${chalk.green.bold("● PI CONNECTED")} ${chalk.dim(`(${pidStr}${sessStr})`)} ${chalk.green("⚡ Live Sync Active")}`;
+		out.push(line(`Connection : ${statusText}`));
+	} else {
+		const statusText = `${chalk.yellow.bold("○ PI DISCONNECTED / STANDALONE")} ${chalk.dim("(Start 'pi' in terminal to link session)")}`;
+		out.push(line(`Connection : ${statusText}`));
+	}
 	out.push(separator());
 
 	// ACCOUNTS & LIVE QUOTA MONITORING TABLE

@@ -22,6 +22,7 @@ import type {
 	OrchestratorConfig,
 	OrchestratorEvent,
 	OrchestratorStatus,
+	PiSessionConnection,
 	SkillExtractionResult,
 	TaskResult,
 	ThinkingLevel,
@@ -60,6 +61,7 @@ export class Orchestrator {
 	private readonly workspaces: Map<string, WorkerWorkspace> = new Map();
 	private readonly listeners: Set<(event: OrchestratorEvent) => void> = new Set();
 	private taskCounter = 0;
+	private sessionConnection?: PiSessionConnection;
 
 	constructor(cwd: string = process.cwd()) {
 		this.cwd = cwd;
@@ -256,6 +258,48 @@ export class Orchestrator {
 		});
 	}
 
+	public pingSessionHeartbeat(pid: number, sessionName?: string, cwd?: string): void {
+		this.sessionConnection = {
+			connected: true,
+			pid,
+			sessionName,
+			lastHeartbeat: Date.now(),
+			cwd: cwd || this.cwd,
+		};
+		this.saveState();
+	}
+
+	public setSessionDisconnected(): void {
+		if (this.sessionConnection) {
+			this.sessionConnection.connected = false;
+			this.sessionConnection.lastHeartbeat = 0;
+			this.saveState();
+		}
+	}
+
+	public getSessionConnection(): PiSessionConnection {
+		if (!this.sessionConnection?.pid) {
+			return { connected: false };
+		}
+		let isAlive = false;
+		try {
+			process.kill(this.sessionConnection.pid, 0);
+			isAlive = true;
+		} catch {
+			isAlive = false;
+		}
+		const isFresh = Boolean(
+			this.sessionConnection.lastHeartbeat && Date.now() - this.sessionConnection.lastHeartbeat < 8000,
+		);
+		return {
+			connected: isAlive && isFresh,
+			pid: this.sessionConnection.pid,
+			sessionName: this.sessionConnection.sessionName,
+			lastHeartbeat: this.sessionConnection.lastHeartbeat,
+			cwd: this.sessionConnection.cwd,
+		};
+	}
+
 	private getStateFilePath(): string {
 		return join(this.cwd, CONFIG_DIR_NAME, "orchestrator-state.json");
 	}
@@ -284,6 +328,7 @@ export class Orchestrator {
 						mainTask: this.mainTask,
 						masterStatus: this.master.status,
 						masterActivity: this.master.currentActivity,
+						sessionConnection: this.sessionConnection,
 						lastUpdated: Date.now(),
 						tasks: serializableTasks,
 					},
@@ -304,6 +349,9 @@ export class Orchestrator {
 			const data = JSON.parse(readFileSync(filePath, "utf-8"));
 			this.taskCounter = data.taskCounter || 0;
 			if (data.mainTask) this.mainTask = data.mainTask;
+			if (data.sessionConnection) {
+				this.sessionConnection = data.sessionConnection;
+			}
 			if (data.masterStatus) {
 				this.master.setStatus(data.masterStatus, data.masterActivity);
 			}
@@ -724,6 +772,7 @@ export class Orchestrator {
 				worker: { model: "gemini-3.8-flash", thinking: "low" },
 				auditor: { model: "grok-beta", thinking: "off" },
 			},
+			connection: this.getSessionConnection(),
 		};
 	}
 

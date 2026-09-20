@@ -89,6 +89,13 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 			// ignore
 		}
 
+		// Send initial heartbeat and keep continuous live session connection
+		const sessionName = (ctx.sessionManager as any)?.getSessionName?.() || "pi-interactive";
+		orchestrator.pingSessionHeartbeat(process.pid, sessionName, process.cwd());
+		const heartbeatTimer = setInterval(() => {
+			orchestrator.pingSessionHeartbeat(process.pid, sessionName, process.cwd());
+		}, 3000);
+
 		// Custom Footer: Displays Pi.ORCHESTRATOR [M: high | W: low] in the bottom right corner!
 		ctx.ui.setFooter((tui: any, theme: any, footerData: any) => {
 			const unsub = footerData?.onBranchChange?.(() => tui.requestRender());
@@ -194,6 +201,7 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 	});
 
 	pi.on("session_shutdown", async () => {
+		orchestrator.setSessionDisconnected();
 		orchestrator.setMasterLiveState("idle", "Session closed");
 	});
 

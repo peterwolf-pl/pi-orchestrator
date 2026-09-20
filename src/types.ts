@@ -201,6 +201,14 @@ export interface MainTaskInfo {
 	status: "pending" | "running" | "completed" | "failed";
 }
 
+export interface PiSessionConnection {
+	connected: boolean;
+	pid?: number;
+	sessionName?: string;
+	lastHeartbeat?: number;
+	cwd?: string;
+}
+
 export interface OrchestratorStatus {
 	mainTask?: MainTaskInfo;
 	master: AgentInfo;
@@ -214,6 +222,7 @@ export interface OrchestratorStatus {
 	idleWorkEnabled: boolean;
 	skillsCreated: SkillExtractionResult[];
 	models?: OrchestratorModelSettings;
+	connection?: PiSessionConnection;
 }
 
 export type OrchestratorEventType =
