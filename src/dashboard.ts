@@ -237,6 +237,20 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 	// DELEGATED LIVE SUBTASKS & ACTIVITY FEED (SCROLLABLE WINDOW)
 	const taskLines: string[] = [];
 
+	// 1. MASTER AGENT LIVE ACTIVITY ENTRY
+	const masterStatusStr = formatStatus(status.master.status);
+	const isMasterRunning = status.master.status === "running";
+	const masterActivity =
+		status.master.currentActivity ||
+		(isMasterRunning ? "Processing user instructions..." : "Awaiting next prompt in Pi session");
+	const masterIcon = isMasterRunning ? chalk.green.bold("▶") : chalk.dim("●");
+
+	taskLines.push(
+		`  ${chalk.magenta.bold("[MASTER]")} ${chalk.bold.white(status.master.name.padEnd(16))} ${chalk.dim("Main Agent")} ${masterStatusStr}`,
+	);
+	taskLines.push(`     ${masterIcon} ${chalk.white(masterActivity.slice(0, innerWidth - 12))}`);
+	taskLines.push(chalk.dim(`  ${"┄".repeat(innerWidth - 8)}`));
+
 	if (status.tasks.length === 0) {
 		taskLines.push(chalk.dim("  (No subtasks delegated yet. Workers idle / awaiting instructions)"));
 	} else {

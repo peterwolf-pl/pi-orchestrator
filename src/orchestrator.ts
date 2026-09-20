@@ -223,6 +223,17 @@ export class Orchestrator {
 		saveOrchestratorConfig(this.config, this.cwd);
 	}
 
+	public setMasterLiveState(status: AgentState, activity?: string): void {
+		this.master.setStatus(status, activity);
+		this.saveState();
+		this.emitEvent({
+			type: "agent_state_changed",
+			agentName: this.config.masterAccount,
+			timestamp: Date.now(),
+			data: { status, activity },
+		});
+	}
+
 	private getStateFilePath(): string {
 		return join(this.cwd, CONFIG_DIR_NAME, "orchestrator-state.json");
 	}
@@ -249,6 +260,9 @@ export class Orchestrator {
 					{
 						taskCounter: this.taskCounter,
 						mainTask: this.mainTask,
+						masterStatus: this.master.status,
+						masterActivity: this.master.currentActivity,
+						lastUpdated: Date.now(),
 						tasks: serializableTasks,
 					},
 					null,
@@ -261,13 +275,16 @@ export class Orchestrator {
 		}
 	}
 
-	private loadState(): void {
+	public loadState(): void {
 		try {
 			const filePath = this.getStateFilePath();
 			if (!existsSync(filePath)) return;
 			const data = JSON.parse(readFileSync(filePath, "utf-8"));
 			if (data.taskCounter) this.taskCounter = data.taskCounter;
 			if (data.mainTask) this.mainTask = data.mainTask;
+			if (data.masterStatus) {
+				this.master.setStatus(data.masterStatus, data.masterActivity);
+			}
 			if (Array.isArray(data.tasks)) {
 				for (const [k, v] of data.tasks) {
 					this.tasks.set(k, v);
@@ -603,6 +620,7 @@ export class Orchestrator {
 	}
 
 	public async getStatus(forceRefreshQuotas = false): Promise<OrchestratorStatus> {
+		this.loadState();
 		const workersList: AgentInfo[] = [];
 		for (const [id, agent] of this.workerAgents) {
 			workersList.push({

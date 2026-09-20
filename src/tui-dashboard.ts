@@ -4,6 +4,8 @@
  * switch master/worker accounts, toggle security auditor, and view live 5h/weekly quotas.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as readline from "node:readline";
 import chalk from "chalk";
 import { renderDashboard } from "./dashboard.ts";
@@ -78,10 +80,23 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 	message = chalk.cyan("Dashboard active. Press [H] for help, [Q] to quit.");
 	await redraw(true);
 
-	// Periodic auto-refresh every 4 seconds
+	// Periodic auto-refresh every 1.5 seconds for live multi-agent sync
 	refreshInterval = setInterval(() => {
 		void redraw(false);
-	}, 4000);
+	}, 1500);
+
+	// Instant cross-process state file watcher (Terminal 1 Pi <-> Terminal 2 Dashboard)
+	const stateFile = path.join(orchestrator.cwd, ".pi", "orchestrator-state.json");
+	let stateWatcher: fs.FSWatcher | null = null;
+	try {
+		if (fs.existsSync(stateFile)) {
+			stateWatcher = fs.watch(stateFile, () => {
+				void redraw(false);
+			});
+		}
+	} catch {
+		// ignore
+	}
 
 	const handleKey = async (key: string) => {
 		if (isInputMode) return;
@@ -90,6 +105,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 		if (key === "q" || key === "Q" || key === "\u0003") {
 			running = false;
 			if (refreshInterval) clearInterval(refreshInterval);
+			if (stateWatcher) stateWatcher.close();
 			if (process.stdin.setRawMode) {
 				process.stdin.setRawMode(false);
 			}
@@ -114,15 +130,15 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 			return;
 		}
 
-		// Arrow Up / k - Scroll task feed up (older tasks)
-		if (key === "\u001b[A" || key === "k") {
+		// Arrow Up - Scroll task feed up (older tasks)
+		if (key === "\u001b[A") {
 			currentScrollOffset++;
 			await redraw(false);
 			return;
 		}
 
-		// Arrow Down / j - Scroll task feed down (newer tasks)
-		if (key === "\u001b[B" || key === "j") {
+		// Arrow Down - Scroll task feed down (newer tasks)
+		if (key === "\u001b[B") {
 			currentScrollOffset = Math.max(0, currentScrollOffset - 1);
 			await redraw(false);
 			return;
@@ -306,16 +322,11 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 			return;
 		}
 
-		// K - Extract Skills and generate documentation now
+		// K - Skills & Documentation Manager
 		if (key === "k" || key === "K") {
 			const tasks = orchestrator.getTasks();
 			const completed = tasks.filter((t) => t.status === "completed");
-			if (completed.length === 0) {
-				message = chalk.yellow("No completed tasks available to extract skills from yet.");
-				await redraw(false);
-				return;
-			}
-			message = chalk.yellow("Extracting skills and updating documentation...");
+			message = chalk.yellow("Running Skill Manager: extracting skills & updating docs...");
 			await redraw(false);
 			try {
 				let count = 0;
@@ -325,8 +336,11 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 						count++;
 					}
 				}
-				await orchestrator.updateDocumentation();
-				message = chalk.green.bold(`Skills & Docs updated! (Extracted ${count} new skills, docs generated)`);
+				const doc = await orchestrator.updateDocumentation();
+				const allSkills = orchestrator.skillManager.getSkills();
+				message = chalk.green.bold(
+					`✔ Skills & Docs updated! (Extracted: +${count} new | Total skills: ${allSkills.length} in .pi/skills/ | Doc: ${doc.filePath})`,
+				);
 			} catch (err: any) {
 				message = chalk.red.bold(`Skill extraction failed: ${err.message}`);
 			}

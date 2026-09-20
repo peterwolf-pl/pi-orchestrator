@@ -135,11 +135,30 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 	});
 
 	pi.on("turn_start", async (_event, ctx) => {
-		if (!ctx.hasUI) return;
-		updateUiIndicators(ctx.ui);
+		orchestrator.setMasterLiveState("running", "Processing user prompt & planning...");
+		if (ctx.hasUI) updateUiIndicators(ctx.ui);
 	});
 
 	pi.on("tool_execution_start", async (event, ctx) => {
+		let desc = `Tool ${event.toolName}`;
+		if (event.toolName === "bash") {
+			desc = `Running bash: ${(event.args as any)?.command || ""}`.slice(0, 50);
+		} else if (event.toolName === "edit") {
+			desc = `Editing: ${(event.args as any)?.path || ""}`;
+		} else if (event.toolName === "write") {
+			desc = `Writing: ${(event.args as any)?.path || ""}`;
+		} else if (event.toolName === "read") {
+			desc = `Reading: ${(event.args as any)?.path || ""}`;
+		} else if (event.toolName === "delegate_task") {
+			desc = `Delegating to worker: "${(event.args as any)?.title || ""}"`;
+		} else if (event.toolName === "run_security_audit") {
+			desc = `Auditing diff for ${(event.args as any)?.task_id || ""}`;
+		} else if (event.toolName === "approve_worker_task") {
+			desc = `Approving task ${(event.args as any)?.task_id || ""}`;
+		}
+
+		orchestrator.setMasterLiveState("running", desc);
+
 		if (!ctx.hasUI) return;
 		if (event.toolName === "delegate_task") {
 			ctx.ui.setStatus("orchestrator", ctx.ui.theme.fg("warning", "⚡ [Worker Executing in Git Worktree...]"));
@@ -149,9 +168,17 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 		}
 	});
 
-	pi.on("tool_execution_end", async (_event, ctx) => {
-		if (!ctx.hasUI) return;
-		updateUiIndicators(ctx.ui);
+	pi.on("tool_execution_end", async (event, ctx) => {
+		orchestrator.setMasterLiveState("running", `Finished ${event.toolName}, synthesizing response...`);
+		if (ctx.hasUI) updateUiIndicators(ctx.ui);
+	});
+
+	pi.on("agent_settled", async (_event, _ctx) => {
+		orchestrator.setMasterLiveState("idle", "Awaiting next prompt in Pi session");
+	});
+
+	pi.on("session_shutdown", async () => {
+		orchestrator.setMasterLiveState("idle", "Session closed");
 	});
 
 	// 4. Register slash commands
