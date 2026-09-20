@@ -1,0 +1,45 @@
+{
+  "name": "pi-orchestrator",
+  "version": "1.0.0",
+  "description": "Multi-Agent AI Coding Orchestrator for Pi Coding Agent (Multi-Account, Live Quota Monitor, Security Auditor, Skill Manager)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "pi-orchestrator": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:@earendil-works/* --external:chalk --external:yaml && esbuild bin/pi-orchestrator.js --bundle --platform=node --format=esm --outfile=dist/bin.js --external:@earendil-works/* --external:chalk --external:yaml && chmod +x dist/bin.js",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "multi-agent",
+    "antigravity",
+    "orchestrator"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "*",
+    "chalk": "6.0.0",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT"
+}
