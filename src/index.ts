@@ -197,7 +197,29 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 		orchestrator.setMasterLiveState("idle", "Session closed");
 	});
 
-	// 4. Register slash commands
+	// 4. Ensure auto-generated project skills in .pi/skills/ are discovered for the current directory
+	pi.on("resources_discover", async (event, _ctx) => {
+		const projectSkillsDir = path.join(event.cwd, ".pi", "skills");
+		return {
+			skillPaths: fs.existsSync(projectSkillsDir) ? [projectSkillsDir] : [],
+		};
+	});
+
+	// 5. Inject project-local learned skills into Master Agent system prompt
+	pi.on("before_agent_start", async (event, _ctx) => {
+		const skills = orchestrator.skillManager.getSkills();
+		if (skills.length === 0) return;
+
+		const skillBullets = skills
+			.map((s) => `- ${s.skillName}: ${s.title} (location: ${path.join(process.cwd(), s.filePath)})`)
+			.join("\n");
+
+		return {
+			systemPrompt: `${event.systemPrompt}\n\n<project_learned_skills>\nThe following project-specific skills were automatically learned and saved for this folder (${process.cwd()}):\n${skillBullets}\nUse the read tool to load any skill when working on related tasks.\n</project_learned_skills>`,
+		};
+	});
+
+	// 6. Register slash commands
 	pi.registerCommand("task", {
 		description: "Set main coding objective for Master Agent",
 		handler: async (args, ctx) => {
