@@ -3,6 +3,8 @@
  * Extension entrypoint for Pi Coding Agent.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { getOrchestrator } from "./cli.ts";
@@ -44,6 +46,8 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 	// 3. UI Status Line & Persistent Banner (Visible in every interactive session)
 	const updateUiIndicators = (ui: any) => {
 		if (!ui) return;
+		orchestrator.reloadConfig();
+		orchestrator.loadState();
 		const activeWorkers = orchestrator.getActiveWorkers();
 		const auditorName = orchestrator.securityAuditor.getAuditorAccount();
 		const auditorEnabled = orchestrator.securityAuditor.isEnabled();
@@ -52,7 +56,7 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 		ui.setStatus(
 			"orchestrator",
 			theme.fg("accent", "⚡ Orchestrator ") +
-				theme.fg("dim", `[${activeWorkers.length}w | ${auditorEnabled ? auditorName : "no-sec"}]`),
+				theme.fg("dim", `[${activeWorkers.length}w | ${auditorEnabled ? auditorName : "auditor:off"}]`),
 		);
 
 		ui.setWidget(
@@ -72,6 +76,18 @@ export default async function orchestratorExtension(pi: ExtensionAPI): Promise<v
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		updateUiIndicators(ctx.ui);
+
+		// Watch config changes from Terminal 2 Dashboard in real time
+		const configYamlPath = path.join(process.cwd(), ".pi", "orchestrator.yaml");
+		try {
+			if (fs.existsSync(configYamlPath)) {
+				fs.watch(configYamlPath, () => {
+					updateUiIndicators(ctx.ui);
+				});
+			}
+		} catch {
+			// ignore
+		}
 
 		// Custom Footer: Displays Pi.ORCHESTRATOR [M: high | W: low] in the bottom right corner!
 		ctx.ui.setFooter((tui: any, theme: any, footerData: any) => {

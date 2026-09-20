@@ -17,6 +17,8 @@ function spawnProcessSync(command: string, args: string[], options: any) {
 export interface WorkerExecutionOptions {
 	logger?: OrchestratorLogger;
 	fileOwnership?: FileOwnershipManager;
+	model?: string;
+	thinking?: string;
 	/** Custom session executor or LLM runner */
 	runTurn?: (prompt: string, workspacePath: string, signal: AbortSignal) => Promise<string>;
 }
@@ -109,10 +111,47 @@ Provide a clear structured report containing:
 				let rawOutput = "";
 				const prompt = this.buildIsolatedPrompt(task);
 
-				// 1. Run LLM turn if executor provided
+				// 1. Run LLM turn if executor provided or spawn worker sub-agent
 				if (options?.runTurn) {
 					this.addSubtask("executing agent turn");
 					rawOutput = await options.runTurn(prompt, workspace.workspacePath, abortController.signal);
+				} else {
+					// Real worker sub-agent execution via Pi CLI in isolated workspace
+					this.addSubtask(`running sub-agent on ${task.agent}`);
+					this.setActivity(`Worker executing task with ${task.agent}...`);
+					options?.logger?.logWorker(task.task_id, `Spawning Pi worker agent (${task.agent}) in worktree`);
+
+					const workerModel = options?.model || "gemini-3.8-flash";
+					const workerThinking = options?.thinking || "low";
+
+					try {
+						const res = spawnProcessSync(
+							"pi",
+							[
+								"--provider",
+								task.agent,
+								"--model",
+								workerModel,
+								"--thinking",
+								workerThinking,
+								"-p",
+								"--no-session",
+								prompt,
+							],
+							{
+								cwd: workspace.workspacePath,
+								encoding: "utf-8",
+								timeout: timeoutMs,
+							},
+						);
+						rawOutput = (res.stdout || "") + (res.stderr ? `\n${res.stderr}` : "");
+						options?.logger?.logWorker(
+							task.task_id,
+							`Pi worker agent finished. Output length: ${rawOutput.length}`,
+						);
+					} catch (e: any) {
+						rawOutput = `Worker execution error: ${e.message}`;
+					}
 				}
 
 				// 2. Run tests if requested

@@ -214,6 +214,12 @@ export async function handleOrchestratorCommand(
 			return true;
 		}
 
+		case "clear": {
+			orchestrator.clearTasks();
+			console.log(chalk.green("Cleared task history and reset task feed."));
+			return true;
+		}
+
 		case "skills": {
 			const sub = args[1]?.toLowerCase();
 			if (sub === "extract") {

@@ -331,11 +331,13 @@ export function renderDashboard(status: OrchestratorStatus, width = 78, options:
 	// KEYBOARD SHORTCUTS LEGEND
 	out.push(
 		line(
-			`${chalk.dim("[↑/↓]")} Scroll  ${chalk.dim("[1-5]")} Worker  ${chalk.dim(
-				"[M]",
-			)} Master  ${chalk.dim("[S]")} Auditor  ${chalk.dim("[O]")} Model  ${chalk.dim(
-				"[A]",
-			)} Auto  ${chalk.dim("[Q]")} Exit`,
+			`${chalk.dim("[↑/↓]")} Scroll  ${chalk.dim("[+/-]")} Size  ${chalk.dim(
+				"[C]",
+			)} Clear  ${chalk.dim("[1-5]")} Worker  ${chalk.dim("[M]")} Master  ${chalk.dim(
+				"[S]",
+			)} Auditor  ${chalk.dim("[O]")} Model  ${chalk.dim("[K]")} Skill  ${chalk.dim(
+				"[Q]",
+			)} Exit`,
 		),
 	);
 	out.push(bottomBorder());

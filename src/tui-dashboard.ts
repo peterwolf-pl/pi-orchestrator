@@ -25,6 +25,7 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 	let isInputMode = false;
 	let refreshInterval: NodeJS.Timeout | null = null;
 	let currentScrollOffset = 0;
+	let currentWindowSize = 14;
 
 	const clearScreen = () => {
 		process.stdout.write("\x1b[2J\x1b[0;0H");
@@ -35,9 +36,10 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 		try {
 			const status = await orchestrator.getStatus(forceQuota);
 			clearScreen();
-			const rendered = renderDashboard(status, Math.min(process.stdout.columns || 80, 95), {
+			const termWidth = Math.min(process.stdout.columns || 90, 120);
+			const rendered = renderDashboard(status, termWidth, {
 				scrollOffset: currentScrollOffset,
-				windowSize: 8,
+				windowSize: currentWindowSize,
 			});
 			process.stdout.write(`${rendered}\n`);
 			if (message) {
@@ -154,6 +156,31 @@ export async function runInteractiveDashboard(orchestrator: Orchestrator): Promi
 		// Page Down - Scroll 5 lines down
 		if (key === "\u001b[6~") {
 			currentScrollOffset = Math.max(0, currentScrollOffset - 5);
+			await redraw(false);
+			return;
+		}
+
+		// + / = - Expand task feed window height
+		if (key === "+" || key === "=") {
+			currentWindowSize = Math.min(30, currentWindowSize + 2);
+			message = chalk.cyan(`Task window size expanded: ${currentWindowSize} lines`);
+			await redraw(false);
+			return;
+		}
+
+		// - / _ - Shrink task feed window height
+		if (key === "-" || key === "_") {
+			currentWindowSize = Math.max(6, currentWindowSize - 2);
+			message = chalk.cyan(`Task window size reduced: ${currentWindowSize} lines`);
+			await redraw(false);
+			return;
+		}
+
+		// C / c - Clear historical tasks
+		if (key === "c" || key === "C") {
+			orchestrator.clearTasks();
+			currentScrollOffset = 0;
+			message = chalk.green.bold("Cleared task history and reset task feed!");
 			await redraw(false);
 			return;
 		}

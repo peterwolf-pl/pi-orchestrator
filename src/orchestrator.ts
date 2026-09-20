@@ -83,6 +83,26 @@ export class Orchestrator {
 		this.loadState();
 	}
 
+	public reloadConfig(): void {
+		const newConfig = loadOrchestratorConfig(this.cwd);
+		Object.assign(this.config, newConfig);
+		this.securityAuditor.setAuditorAccount(this.config.securityAuditorAccount);
+		this.securityAuditor.setEnabled(this.config.securityAuditorEnabled);
+		this.masterAgent = new MasterAgent(this.config.masterAccount);
+
+		const activeSet = new Set(this.config.activeWorkers);
+		for (const w of this.config.activeWorkers) {
+			if (!this.workerAgents.has(w)) {
+				this.workerAgents.set(w, new WorkerAgent(w));
+			}
+		}
+		for (const k of Array.from(this.workerAgents.keys())) {
+			if (!activeSet.has(k)) {
+				this.workerAgents.delete(k);
+			}
+		}
+	}
+
 	public get master(): MasterAgent {
 		return this.masterAgent;
 	}
@@ -141,6 +161,7 @@ export class Orchestrator {
 		}
 
 		saveOrchestratorConfig(this.config, this.cwd);
+		this.saveState();
 		this.emitEvent({
 			type: "account_switched",
 			agentName: accountId,
@@ -224,6 +245,7 @@ export class Orchestrator {
 	}
 
 	public setMasterLiveState(status: AgentState, activity?: string): void {
+		this.loadState();
 		this.master.setStatus(status, activity);
 		this.saveState();
 		this.emitEvent({
@@ -280,11 +302,12 @@ export class Orchestrator {
 			const filePath = this.getStateFilePath();
 			if (!existsSync(filePath)) return;
 			const data = JSON.parse(readFileSync(filePath, "utf-8"));
-			if (data.taskCounter) this.taskCounter = data.taskCounter;
+			this.taskCounter = data.taskCounter || 0;
 			if (data.mainTask) this.mainTask = data.mainTask;
 			if (data.masterStatus) {
 				this.master.setStatus(data.masterStatus, data.masterActivity);
 			}
+			this.tasks.clear();
 			if (Array.isArray(data.tasks)) {
 				for (const [k, v] of data.tasks) {
 					this.tasks.set(k, v);
@@ -413,7 +436,14 @@ export class Orchestrator {
 
 		let result: TaskResult;
 		try {
-			result = await workerAgent.executeTask(task, workspace, options);
+			const workerOptions: WorkerExecutionOptions = {
+				...options,
+				model: options.model || this.config.models?.worker?.model || "gemini-3.8-flash",
+				thinking: options.thinking || this.config.models?.worker?.thinking || "low",
+				logger: this.logger,
+				fileOwnership: this.fileOwnership,
+			};
+			result = await workerAgent.executeTask(task, workspace, workerOptions);
 
 			let diff = "";
 			try {
@@ -620,6 +650,7 @@ export class Orchestrator {
 	}
 
 	public async getStatus(forceRefreshQuotas = false): Promise<OrchestratorStatus> {
+		this.reloadConfig();
 		this.loadState();
 		const workersList: AgentInfo[] = [];
 		for (const [id, agent] of this.workerAgents) {
@@ -723,6 +754,17 @@ export class Orchestrator {
 
 	public async updateDocumentation(): Promise<DocsGenerationResult> {
 		return this.skillManager.generateDocumentation(this.getTasks(), this.config.masterAccount);
+	}
+
+	public clearTasks(): void {
+		this.tasks.clear();
+		this.taskCounter = 0;
+		this.saveState();
+		this.emitEvent({
+			type: "main_task_updated",
+			timestamp: Date.now(),
+			data: { cleared: true },
+		});
 	}
 
 	public getTasks(): WorkerTaskRecord[] {
